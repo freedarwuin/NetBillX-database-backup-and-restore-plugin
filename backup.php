@@ -471,35 +471,40 @@ function backup_uploadToDropbox(string $filePath, string $accessToken): void
 {
     $url = 'https://content.dropboxapi.com/2/files/upload';
     $fileName = basename($filePath);
+    $dropboxPath = "/" . $fileName;
+
+    $fp = fopen($filePath, 'rb');
+    if (!$fp) {
+        throw new \RuntimeException("Failed to open file for reading: {$filePath}");
+    }
 
     $headers = [
         "Authorization: Bearer $accessToken",
-        'Content-Type: application/octet-stream',
+        "Content-Type: application/octet-stream",
         'Dropbox-API-Arg: ' . json_encode([
-            'path' => "/$fileName",
-            'mode' => 'overwrite'
+            'path' => $dropboxPath,
+            'mode' => 'overwrite',
+            'autorename' => false
         ])
     ];
 
-    $ch = curl_init();
-    $fp = fopen($filePath, 'rb');
-
-    curl_setopt($ch, CURLOPT_URL, $url);
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $fp);
+    // ⚠️ Importante: se envia como PUT + POST combinado para Dropbox
+    curl_setopt($ch, CURLOPT_PUT, true);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+    curl_setopt($ch, CURLOPT_INFILE, $fp);
     curl_setopt($ch, CURLOPT_INFILESIZE, filesize($filePath));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
     $response = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     curl_close($ch);
     fclose($fp);
 
     if ($status !== 200) {
-        throw new \RuntimeException("Dropbox upload failed (HTTP $status): $error - $response");
+        throw new \RuntimeException("Dropbox upload failed (HTTP $status): $response");
     }
 }
 function backup_upload_form(): void
